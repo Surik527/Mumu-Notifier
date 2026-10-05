@@ -3,6 +3,9 @@ import time
 import schedule
 import logging
 import requests
+import os
+
+
 
 from io import BytesIO
 
@@ -164,8 +167,8 @@ def load_json():
         args['price_min'] = data.get('price_min', {})
         args['price_max'] = data.get('price_max', {})
         args['discord_hook_url'] = data['discord_hook_url'] or None
-        args['telegram_token'] = data['telegram_token'] or None
-        args['telegram_chat_id'] = data['telegram_chat_id'] or None
+        args['telegram_token'] = os.environ.get('TELEGRAM_TOKEN') or data['telegram_token'] or None
+        args['telegram_chat_id'] = os.environ.get('CHAT_ID') or data['telegram_chat_id'] or None
         args['proxies'] = data['proxies'] or None
         args['exclude'] = data['exclude'] or None
         args['image_display'] = data.get('image_display', True)
