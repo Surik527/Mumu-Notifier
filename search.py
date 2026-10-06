@@ -4,7 +4,7 @@ import logging
 import requests
 import asyncio
 from mercapi import Mercapi
-from mercapi.requests.search import SearchRequestData
+
 
 from bs4 import BeautifulSoup
 
@@ -82,71 +82,135 @@ def parse_item(site, element):
 
 
 def search(keyword, args, sites=None, maximum_page=3) -> list[Item]:
-    proxies = args['proxies']
+    results = []
 
     if sites is None:
         sites = ['mercari', 'yahoo', 'paypay', 'rakuma']
-    results = []
 
-    for site in sites:
+    # Mercari: прямой поиск через Mercari API
+    if 'mercari' in sites:
+        async def mercari_search():
+            mercapi = Mercapi()
 
-        page = 1
-        while True:
+            page_results = await mercapi.search(keyword)
+            
 
-            while True:
-                res = []
-                try:
-                    if site == 'mercari':
-                        condition_filters = args['mercari_settings']['condition_filters']
-                        conditions = [MERCARI_CONDITIONS[k] for k, v in condition_filters.items() if v]
-                        res.append(
-                            requests.post(
-                                f"https://zenmarket.jp/ja/{site}.aspx?q={keyword}&sort=new&order=desc&p={page}&condition={','.join(conditions)}",
-                                headers=headers,
-                                proxies=proxies
-                            )
-                        )
-                    elif site == 'yahoo':
-                        res.append(
-                            requests.post(f"https://zenmarket.jp/ja/{site}.aspx?q={keyword}&sort=new&order=desc&p={page}",
-                                          headers=headers, proxies=proxies)
-                        )
-                    elif site in ['paypay']:
-                        res.append(
-                            requests.post(f"https://paypayfleamarket.yahoo.co.jp/search/{keyword}?page={page}",
-                                          headers=headers, proxies=proxies)
-                        )
-                    elif site in ['rakuma']:
-                        res.extend([
-                            requests.post(f"https://zenmarket.jp/ja/rakuma.aspx?sellerType={t}&q={keyword}&sort=new&order=desc&p={page}",
-                                            headers=headers, proxies=proxies) for t in [1, 2]
-                        ])
-                except Exception as e:
-                    logging.warning(e)
-                    time.sleep(1)
-                    continue
-                if all(r.status_code in [200, 404] for r in res):
+            all_items = list(page_results.items)
+
+            for _ in range(1, maximum_page):
+                if not page_results.meta.next_page_token:
                     break
-                else:
-                    time.sleep(1)
+
+                page_results = await page_results.next_page()
+                all_items.extend(page_results.items)
+
+            return all_items
+
+        try:
+            mercari_items = asyncio.run(mercari_search())
+
+            logging.info(
+                f"Mercari: found {len(mercari_items)} items for [{keyword}]"
+            )
+
+            for mercari_item in mercari_items:
+                item = Item('mercari', mercari_item.id_)
+
+                item.productName = mercari_item.name
+                item.price = mercari_item.real_price
+                item.productURL = (
+                    f"https://jp.mercari.com/item/{mercari_item.id_}"
+                )
+
+                if mercari_item.thumbnails:
+                    item.imageURL = mercari_item.thumbnails[0]
+
+                results.append(item)
+
+        except Exception as e:
+            logging.warning(f"Mercari search error: {e}")
+
+    # Остальные площадки оставляем по старому коду
+    for site in sites:
+        if site == 'mercari':
+            continue
+
+        proxies = args['proxies']
+        page = 1
+
+        while page <= maximum_page:
+            res = []
+
+            try:
+                if site == 'yahoo':
+                    res.append(
+                        requests.post(
+                            f"https://zenmarket.jp/ja/{site}.aspx?q={keyword}&sort=new&order=desc&p={page}",
+                            headers=headers,
+                            proxies=proxies
+                        )
+                    )
+
+                elif site in ['paypay']:
+                    res.append(
+                        requests.post(
+                            f"https://paypayfleamarket.yahoo.co.jp/search/{keyword}?page={page}",
+                            headers=headers,
+                            proxies=proxies
+                        )
+                    )
+
+                elif site in ['rakuma']:
+                    res.extend([
+                        requests.post(
+                            f"https://zenmarket.jp/ja/rakuma.aspx?sellerType={t}&q={keyword}&sort=new&order=desc&p={page}",
+                            headers=headers,
+                            proxies=proxies
+                        )
+                        for t in [1, 2]
+                    ])
+
+            except Exception as e:
+                logging.warning(e)
+                time.sleep(1)
+                continue
+
+            if all(r.status_code in [200, 404] for r in res):
+                break
+            else:
+                time.sleep(1)
 
             for r in res:
                 soup = BeautifulSoup(r.content, 'html.parser')
 
                 if site == 'yahoo':
-                    items = soup.find_all('div', class_='yahoo-search-result')
-                elif site in ['mercari', 'rakuma']:
-                    items = soup.find_all('div', class_='product')
-                elif site == 'paypay':
-                    items = soup.find_all('a', href=True)
+                    items = soup.find_all(
+                        'div',
+                        class_='yahoo-search-result'
+                    )
 
-                for i in items:
-                    if item := parse_item(site, i):
+                elif site == 'rakuma':
+                    items = soup.find_all(
+                        'div',
+                        class_='product'
+                    )
+
+                elif site == 'paypay':
+                    items = soup.find_all(
+                        'a',
+                        href=True
+                    )
+
+                else:
+                    items = []
+
+                for element in items:
+                    if item := parse_item(site, element):
                         results.append(item)
 
-            if page == maximum_page:
-                break
             page += 1
+
+    return results
 
                                     # DEPRECATED!
 
