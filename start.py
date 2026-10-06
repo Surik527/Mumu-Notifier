@@ -135,8 +135,8 @@ def job():
                     items[id] = some_items[id]
 
     new_items = {}
-reduced_items = {}
-passed_price_filter = 0
+    reduced_items = {}
+    passed_price_filter = 0
 
     for keyword in keywords:
         for item in search(keyword, args):
@@ -162,7 +162,6 @@ passed_price_filter = 0
 
     update_items_via_keywords(new_items_keywords_of, new_items, "Found")
     update_items_via_keywords(reduced_items_keywords_of, reduced_items, "Price reduction on")
-
     if not new_items and not reduced_items:
         logging.info("No new items found.")
 
