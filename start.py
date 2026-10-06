@@ -135,9 +135,11 @@ def job():
                     items[id] = some_items[id]
 
     new_items = {}
-    reduced_items = {}
+reduced_items = {}
+passed_price_filter = 0
 
-    for keyword in keywords:
+for keyword in keywords:
+
         for item in search(keyword, args):
             if any(e in item.productName for e in args['exclude']):
                 continue
@@ -145,12 +147,14 @@ def job():
                 continue
             if 'price_max' in args and keyword in args['price_max'] and int(item.price) > args['price_max'][keyword]:
                 continue
+                passed_price_filter += 1
             if item.id not in items:
                 new_items[item.id] = item
                 update_keywords(new_items_keywords_of, item.id, keyword)
             elif int(item.price) < int(items[item.id].price):
                 reduced_items[item.id] = item
                 update_keywords(reduced_items_keywords_of, item.id, keyword)
+    logging.info(f"Items in price range: {passed_price_filter}")
 
     update_items_via_keywords(new_items_keywords_of, new_items, "Found")
     update_items_via_keywords(reduced_items_keywords_of, reduced_items, "Price reduction on")
