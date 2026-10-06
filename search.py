@@ -2,6 +2,9 @@ import re
 import time
 import logging
 import requests
+import asyncio
+from mercapi import Mercapi
+from mercapi.requests.search import SearchRequestData
 
 from bs4 import BeautifulSoup
 
